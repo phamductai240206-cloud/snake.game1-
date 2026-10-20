@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arcade Snake Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        /* CSS Variables */
+        :root {
+            --bg-color: #0f172a;
+            --grid-color: #1e293b;
+            --snake-color: #4ade80;
+            --snake-head: #22c55e;
+            --food-color: #ef4444;
+            --bonus-color: #fbbf24;
+            --rock-color: #64748b;
+            --text-color: #e2e8f0;
+            --btn-bg: #3b82f6;
+            --btn-shadow: #2563eb;
+        }
+
+        /* Reset & Base */
+        * { box-sizing: border-box; touch-action: none; margin: 0; padding: 0; }
+        body {
+            background-color: #020617;
+            color: var(--text-color);
+            font-family: 'Press Start 2P', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Layout */
+        #game-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            padding: 10px;
+        }
+
+        /* UI Elements */
+        .header-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            background: var(--bg-color);
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 2px solid var(--grid-color);
+            font-size: 10px;
+        }
+
+        .score-group { display: flex; flex-direction: column; gap: 6px; }
+        .score-group.right { text-align: right; }
+        .score-val { color: var(--snake-color); font-size: 14px; }
+
+        .control-group { display: flex; gap: 5px; }
+        
+        .btn {
+            background: var(--btn-bg);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            font-family: inherit;
+            font-size: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 var(--btn-shadow);
+            transition: transform 0.1s, box-shadow 0.1s;
+            user-select: none;
+        }
+        .btn:active { transform: translateY(4px); box-shadow: 0 0 0 var(--btn-shadow); }
+        .btn.btn-warning { background: #f59e0b; box-shadow: 0 4px 0 #d97706; }
+
+        /* Canvas Container */
+        #canvas-wrapper {
+            position: relative;
+            background-color: var(--bg-color);
+            border: 4px solid var(--grid-color);
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            aspect-ratio: 1 / 1;
+            width: 100%;
+        }
+        canvas { display: block; width: 100%; height: 100%; }
+
+        /* Overlays (Screens) */
+        .screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(2, 6, 23, 0.9);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 10; text-align: center;
+        }
+        .hidden { display: none !important; }
+
+        .screen h1 { font-size: 20px; color: var(--snake-color); margin-bottom: 15px; line-height: 1.4;}
+        .screen h2 { font-size: 18px; color: var(--food-color); margin-bottom: 10px; }
+        .screen p { font-size: 10px; margin-bottom: 15px; line-height: 1.6; color: #cbd5e1;}
+        .instructions { background: rgba(255,255,255,0.05); padding: 10px; border-radius: 5px; margin-bottom: 15px; text-align: left;}
+        
+        .btn-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 15px; }
+
+        /* Mobile Controls */
+        #d-pad {
+            display: none;
+            grid-template-columns: repeat(3, 65px);
+            grid-template-rows: repeat(2, 65px);
+            gap: 10px; margin-top: 15px; justify-content: center;
+        }
+        @media (max-width: 768px) { #d-pad { display: grid; } }
+        
+        .d-btn {
+            background: #334155; border: 2px solid #475569; border-radius: 8px;
+            color: white; font-size: 20px; display: flex; align-items: center; justify-content: center;
+            user-select: none; -webkit-user-select: none;
+        }
+        .d-btn:active { background: #475569; }
+        #btn-up { grid-column: 2; grid-row: 1; }
+        #btn-left { grid-column: 1; grid-row: 2; }
+        #btn-down { grid-column: 2; grid-row: 2; }
+        #btn-right { grid-column: 3; grid-row: 2; }
+
+        /* Effects */
+        @keyframes flash { 0% { border-color: var(--snake-color); } 100% { border-color: var(--grid-color); } }
+        .fx-eat { animation: flash 0.3s ease-out; }
+        .fx-record { color: var(--bonus-color); animation: blink 0.5s infinite alternate; font-size: 12px; margin-bottom: 15px;}
+        @keyframes blink { from { opacity: 1; } to { opacity: 0.3; } }
+    </style>
+</head>
+<body>
+
+<div id="game-wrapper">
+    <!-- Header -->
+    <div class="header-panel">
+        <div class="score-group">
+            <span>SCORE</span>
+            <span class="score-val" id="ui-score">0</span>
+        </div>
+        <div class="control-group">
+            <button class="btn" id="btn-sound">🔊</button>
+            <button class="btn" id="btn-pause">⏸️</button>
+        </div>
+        <div class="score-group right">
+            <span>BEST</span>
+            <span class="score-val" id="ui-best">0</span>
+        </div>
+    </div>
+
+    <!-- Game Area -->
+    <div id="canvas-wrapper">
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        
+        <!-- Screen: Start -->
+        <div id="screen-start" class="screen">
+            <h1>SNAKE PRO</h1>
+            <div class="instructions">
+                <p>🍎 Táo: +10đ<br>⭐ Sao (5s): +30đ<br>🪨 Đá: Chết</p>
+                <p>💻 PC: Phím mũi tên/WASD<br>📱 Mobile: Vuốt hoặc Nút</p>
+            </div>
+            <p>Chọn độ khó:</p>
+            <div class="btn-row">
+                <button class="btn" onclick="Game.start('easy')">DỄ</button>
+                <button class="btn" onclick="Game.start('normal')">THƯỜNG</button>
+                <button class="btn" onclick="Game.start('hard')">KHÓ</button>
+            </div>
+        </div>
+
+        <!-- Screen: Game Over -->
+        <div id="screen-gameover" class="screen hidden">
+            <h2>GAME OVER</h2>
+            <div id="msg-record" class="fx-record hidden">★ KỶ LỤC MỚI ★</div>
+            <p>Điểm của bạn: <span id="ui-final-score" style="color:#fff">0</span></p>
+            <p>Kỷ lục: <span id="ui-final-best" style="color:#fff">0</span></p>
+            <div class="btn-row">
+                <button class="btn" onclick="Game.showStart()">TRANG CHỦ</button>
+                <button class="btn btn-warning" onclick="Game.start(Game.currentDifficulty)">CHƠI LẠI</button>
+            </div>
+        </div>
+
+        <!-- Screen: Pause -->
+        <div id="screen-pause" class="screen hidden">
+            <h1>TẠM DỪNG</h1>
+            <p>Bấm P hoặc nút Resume để tiếp tục</p>
+            <button class="btn" onclick="Game.togglePause()">TIẾP TỤC</button>
+        </div>
+    </div>
+
+    <!-- D-Pad for Mobile -->
+    <div id="d-pad">
+        <div class="d-btn" id="btn-up">▲</div>
+        <div class="d-btn" id="btn-left">◄</div>
+        <div class="d-btn" id="btn-down">▼</div>
+        <div class="d-btn" id="btn-right">►</div>
+    </div>
+</div>
+
+<script>
+/**
+ * AUDIO MANAGER (Sử dụng Web Audio API để không cần file ngoài)
+ */
+const AudioSys = {
+    ctx: null,
+    muted: false,
+    init() {
+        if (!this.ctx) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+    },
+    play(type) {
+        if (this.muted || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        const now = this.ctx.currentTime;
+        if (type === 'eat') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(800, now);
+            osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.start(now); osc.stop(now + 0.1);
+        } else if (type === 'bonus') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(400, now);
+            osc.frequency.setValueAtTime(600, now + 0.1);
+            osc.frequency.setValueAtTime(800, now + 0.2);
+            gain.gain.setValueAtTime(0.05, now);
+            gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+            osc.start(now); osc.stop(now + 0.3);
+        } else if (type === 'die') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(300, now);
+            osc.frequency.exponentialRampToValueAtTime(50, now + 0.5);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.linearRampToValueAtTime(0.01, now + 0.5);
+            osc.start(now); osc.stop(now + 0.5);
+        }
+    }
+};
+
+/**
+ * STORAGE MANAGER (Lưu trữ cài đặt & Điểm)
+ */
+const StorageSys = {
+    save(key, value) {
+        try { localStorage.setItem(`snake_${key}`, JSON.stringify(value)); } catch(e) { console.warn('LS Error'); }
+    },
+    get(key, defaultVal) {
+        try { 
+            const val = localStorage.getItem(`snake_${key}`);
+            return val !== null ? JSON.parse(val) : defaultVal;
+        } catch(e) { return defaultVal; }
+    }
+};
+
+/**
+ * CORE GAME LOGIC
+ */
+const Game = {
+    canvas: document.getElementById('gameCanvas'),
+    ctx: document.getElementById('gameCanvas').getContext('2d'),
+    config: { TILE: 20, SIZE: 20 }, // 400/20 = 20 grid
+    
+    // State
+    snake: [], food: {}, bonus: null, obstacles: [],
+    dir: {x: 0, y: -1}, lastDir: {x: 0, y: -1}, inputQueue: [],
+    score: 0, bestScore: 0, level: 1, currentDifficulty: 'normal',
+    baseSpeed: 130, currentSpeed: 130, lastTime: 0, loopId: null,
+    isOver: false, isPaused: false,
+
+    // DOM Refs
+    ui: {
+        score: document.getElementById('ui-score'), best: document.getElementById('ui-best'),
+        startScr: document.getElementById('screen-start'), overScr: document.getElementById('screen-gameover'),
+        pauseScr: document.getElementById('screen-pause'), fScore: document.getElementById('ui-final-score'),
+        fBest: document.getElementById('ui-final-best'), recordMsg: document.getElementById('msg-record'),
+        wrapper: document.getElementById('canvas-wrapper'), btnSound: document.getElementById('btn-sound')
+    },
+
+    init() {
+        // Load Storage
+        this.bestScore = StorageSys.get('bestScore', 0);
+        this.ui.best.innerText = this.bestScore;
+        
+        AudioSys.muted = StorageSys.get('muted', false);
+        this.ui.btnSound.innerText = AudioSys.muted ? '🔇' : '🔊';
+
+        this.setupEvents();
+    },
+
+    showStart() {
+        this.ui.overScr.classList.add('hidden');
+        this.ui.startScr.classList.remove('hidden');
+    },
+
+    start(difficulty) {
+        AudioSys.init(); // Bắt buộc tương tác người dùng mới mở AudioContext
+        this.currentDifficulty = difficulty;
+        this.ui.startScr.classList.add('hidden');
+        this.ui.overScr.classList.add('hidden');
+        this.ui.pauseScr.classList.add('hidden');
+        
+        // Reset Variables
+        this.snake = [{x: 10, y: 10}, {x: 10, y: 11}, {x: 10, y: 12}];
+        this.dir = {x: 0, y: -1}; this.lastDir = {x: 0, y: -1}; this.inputQueue = [];
+        this.score = 0; this.level = 1; this.isOver = false; this.isPaused = false; this.bonus = null;
+        
+        // Set Speed
+        if (difficulty === 'easy') this.baseSpeed = 180;
+        else if (difficulty === 'normal') this.baseSpeed = 130;
+        else if (difficulty === 'hard') this.baseSpeed = 90;
+        
+        this.currentSpeed = this.baseSpeed;
+        this.ui.score.innerText = this.score;
+
+        this.generateObstacles();
+        this.spawnFood();
+
+        // Game Loop Init
+        if (this.loopId) cancelAnimationFrame(this.loopId);
+        this.lastTime = performance.now();
+        this.loopId = requestAnimationFrame((t) => this.loop(t));
+    },
+
+    generateObstacles() {
+        this.obstacles = [];
+        if (this.currentDifficulty !== 'hard') return;
+        for(let i=0; i<5; i++){
+            let pos = this.getSafePos();
+            if(pos.x >= 8 && pos.x <= 12 && pos.y >= 8 && pos.y <= 12) continue; // Safe center zone
+            this.obstacles.push(pos);
+        }
+    },
+
+    getSafePos() {
+        let safe = false, pos, attempts = 0;
+        while (!safe && attempts < 200) {
+            pos = { x: Math.floor(Math.random() * this.config.SIZE), y: Math.floor(Math.random() * this.config.SIZE) };
+            let col = this.snake.some(s => s.x === pos.x && s.y === pos.y);
+            if (!col) col = this.obstacles.some(o => o.x === pos.x && o.y === pos.y);
+            if (!col && this.food.x === pos.x && this.food.y === pos.y) col = true;
+            if (!col && this.bonus && this.bonus.x === pos.x && this.bonus.y === pos.y) col = true;
+            if (!col) safe = true;
+            attempts++;
+        }
+        return pos || {x:0, y:0};
+    },
+
+    spawnFood() { this.food = this.getSafePos(); },
+    spawnBonus() {
+        if(Math.random() < 0.2 && !this.bonus) { // 20% tỉ lệ ra sao
+            this.bonus = this.getSafePos();
+            this.bonus.exp = Date.now() + 5000;
+        }
+    },
+
+    loop(currentTime) {
+        if (this.isOver) return;
+        this.loopId = requestAnimationFrame((t) => this.loop(t));
+        
+        if (this.isPaused) return;
+
+        if ((currentTime - this.lastTime) < this.currentSpeed) return;
+        this.lastTime = currentTime;
+        
+        this.update();
+        this.draw();
+    },
+
+    update() {
+        // Xử lý hàng đợi Input
+        if (this.inputQueue.length > 0) {
+            const next = this.inputQueue.shift();
+            if (next.x !== -this.lastDir.x && next.y !== -this.lastDir.y) this.dir = next;
+        }
+        this.lastDir = { ...this.dir };
+
+        const head = { x: this.snake[0].x + this.dir.x, y: this.snake[0].y + this.dir.y };
+
+        // Va chạm Tường
+        if (head.x < 0 || head.x >= this.config.SIZE || head.y < 0 || head.y >= this.config.SIZE) return this.die();
+        // Va chạm Thân
+        if (this.snake.some(s => s.x === head.x && s.y === head.y)) return this.die();
+        // Va chạm Đá
+        if (this.obstacles.some(o => o.x === head.x && o.y === head.y)) return this.die();
+
+        this.snake.unshift(head);
+
+        // Ăn mồi
+        if (head.x === this.food.x && head.y === this.food.y) {
+            AudioSys.play('eat');
+            this.score += 10;
+            this.triggerFx();
+            this.updateLevel();
+            this.spawnFood();
+            this.spawnBonus();
+        } 
+        // Ăn Bonus
+        else if (this.bonus && head.x === this.bonus.x && head.y === this.bonus.y) {
+            AudioSys.play('bonus');
+            this.score += 30;
+            this.bonus = null;
+            this.updateLevel();
+        }
+        else { this.snake.pop(); }
+
+        // Hết hạn Bonus
+        if(this.bonus && Date.now() > this.bonus.exp) this.bonus = null;
+    },
+
+    updateLevel() {
+        this.ui.score.innerText = this.score;
+        if (this.score >= this.level * 50) {
+            this.level++;
+            this.currentSpeed = Math.max(50, this.baseSpeed - (this.level * 10));
+        }
+    },
+
+    triggerFx() {
+        this.ui.wrapper.classList.remove('fx-eat');
+        void this.ui.wrapper.offsetWidth;
+        this.ui.wrapper.classList.add('fx-eat');
+    },
+
+    die() {
+        AudioSys.play('die');
+        this.isOver = true;
+        this.ui.overScr.classList.remove('hidden');
+        this.ui.fScore.innerText = this.score;
+        
+        if (this.score > this.bestScore) {
+            this.bestScore = this.score;
+            StorageSys.save('bestScore', this.bestScore);
+            this.ui.best.innerText = this.bestScore;
+            this.ui.recordMsg.classList.remove('hidden');
+        } else {
+            this.ui.recordMsg.classList.add('hidden');
+        }
+        this.ui.fBest.innerText = this.bestScore;
+    },
+
+    draw() {
+        const C = this.ctx, TS = this.config.TILE;
+        // Background
+        C.fillStyle = '#020617'; C.fillRect(0, 0, 400, 400);
+        
+        // Grid
+        C.strokeStyle = '#1e293b'; C.lineWidth = 1;
+        for(let i = 0; i <= 400; i += TS) {
+            C.beginPath(); C.moveTo(i, 0); C.lineTo(i, 400); C.stroke();
+            C.beginPath(); C.moveTo(0, i); C.lineTo(400, i); C.stroke();
+        }
+
+        // Obstacles
+        C.fillStyle = 'var(--rock-color)';
+        this.obstacles.forEach(o => C.fillRect(o.x * TS + 1, o.y * TS + 1, TS - 2, TS - 2));
+
+        // Bonus
+        if (this.bonus) {
+            C.fillStyle = 'var(--bonus-color)';
+            C.beginPath(); C.arc(this.bonus.x * TS + TS/2, this.bonus.y * TS + TS/2, TS/2 - 2, 0, Math.PI * 2); C.fill();
+            if(Math.floor(Date.now() / 200) % 2 === 0) { C.strokeStyle = '#fff'; C.stroke(); }
+        }
+
+        // Food (Apple)
+        let fx = this.food.x * TS + TS/2, fy = this.food.y * TS + TS/2;
+        C.fillStyle = 'var(--food-color)'; C.beginPath(); C.arc(fx, fy, TS/2 - 2, 0, Math.PI * 2); C.fill();
+        C.fillStyle = '#4ade80'; C.fillRect(fx - 2, fy - TS/2, 4, 4); // Leaf
+
+        // Snake
+        this.snake.forEach((seg, i) => {
+            C.fillStyle = i === 0 ? 'var(--snake-head)' : `rgba(74, 222, 128, ${1 - (i / this.snake.length) * 0.6})`;
+            C.fillRect(seg.x * TS + 1, seg.y * TS + 1, TS - 2, TS - 2);
+            
+            // Eyes
+            if(i === 0) {
+                C.fillStyle = '#000'; let es = 3;
+                let dx = this.lastDir.x, dy = this.lastDir.y;
+                let sx = seg.x * TS, sy = seg.y * TS;
+                if(dx===1)      { C.fillRect(sx+12, sy+4, es, es); C.fillRect(sx+12, sy+12, es, es); }
+                else if(dx===-1){ C.fillRect(sx+4, sy+4, es, es); C.fillRect(sx+4, sy+12, es, es); }
+                else if(dy===-1){ C.fillRect(sx+4, sy+4, es, es); C.fillRect(sx+12, sy+4, es, es); }
+                else            { C.fillRect(sx+4, sy+12, es, es); C.fillRect(sx+12, sy+12, es, es); }
+            }
+        });
+    },
+
+    togglePause() {
+        if(this.isOver || !this.ui.startScr.classList.contains('hidden')) return;
+        this.isPaused = !this.isPaused;
+        if(this.isPaused) this.ui.pauseScr.classList.remove('hidden');
+        else { this.ui.pauseScr.classList.add('hidden'); this.lastTime = performance.now(); }
+    },
+
+    input(dir) {
+        if(this.isPaused || this.isOver || this.inputQueue.length >= 2) return;
+        this.inputQueue.push(dir);
+    },
+
+    setupEvents() {
+        // Keyboard
+        window.addEventListener('keydown', e => {
+            if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
+            switch(e.key.toLowerCase()) {
+                case 'arrowup': case 'w': this.input({x: 0, y: -1}); break;
+                case 'arrowdown': case 's': this.input({x: 0, y: 1}); break;
+                case 'arrowleft': case 'a': this.input({x: -1, y: 0}); break;
+                case 'arrowright': case 'd': this.input({x: 1, y: 0}); break;
+                case 'p': this.togglePause(); break;
+            }
+        });
+
+        // UI Buttons
+        document.getElementById('btn-pause').addEventListener('click', () => this.togglePause());
+        this.ui.btnSound.addEventListener('click', () => {
+            AudioSys.muted = !AudioSys.muted;
+            StorageSys.save('muted', AudioSys.muted);
+            this.ui.btnSound.innerText = AudioSys.muted ? '🔇' : '🔊';
+            AudioSys.init();
+        });
+
+        // Swipe handling
+        let tsX=0, tsY=0;
+        this.ui.wrapper.addEventListener('touchstart', e => { e.preventDefault(); tsX=e.touches[0].screenX; tsY=e.touches[0].screenY; }, {passive: false});
+        this.ui.wrapper.addEventListener('touchmove', e => e.preventDefault(), {passive: false});
+        this.ui.wrapper.addEventListener('touchend', e => {
+            e.preventDefault();
+            let dx = e.changedTouches[0].screenX - tsX, dy = e.changedTouches[0].screenY - tsY;
+            if(Math.abs(dx)<10 && Math.abs(dy)<10) return;
+            if(Math.abs(dx) > Math.abs(dy)) this.input(dx > 0 ? {x:1, y:0} : {x:-1, y:0});
+            else this.input(dy > 0 ? {x:0, y:1} : {x:0, y:-1});
+        }, {passive: false});
+
+        // D-Pad
+        const bindDpad = (id, dir) => {
+            let btn = document.getElementById(id);
+            btn.addEventListener('touchstart', e => { e.preventDefault(); this.input(dir); }, {passive: false});
+            btn.addEventListener('mousedown', e => { e.preventDefault(); this.input(dir); });
+        };
+        bindDpad('btn-up', {x:0, y:-1}); bindDpad('btn-down', {x:0, y:1});
+        bindDpad('btn-left', {x:-1, y:0}); bindDpad('btn-right', {x:1, y:0});
+    }
+};
+
+window.onload = () => Game.init();
+</script>
+</body>
+</html>
